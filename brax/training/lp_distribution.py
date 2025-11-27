@@ -16,9 +16,9 @@ class LowPassNoise:
     def __init__(self, action_dim, cutoff, fs, order=2):
         self.action_dim = action_dim
         # Calculate coefficients using scipy (runs on CPU during init)
-        nyquist = 0.5 * fs
-        normal_cutoff = cutoff / nyquist
-        b, a = signal.butter(order, normal_cutoff, btype='low', analog=False)
+        #nyquist = 0.5 * fs
+        #normal_cutoff = cutoff / nyquist
+        b, a = signal.butter(order, cutoff, btype='low', analog=False, fs=fs)
         
         # Calculate normalization factor to ensure roughly unit variance
         # (matching the logic in your original lp.py)
@@ -89,7 +89,7 @@ class LowPassNoise:
 
         y = y * self.scale_factor
         
-        return y, NoiseState(zi=new_zi, key=key)
+        return y, NoiseState(zi=new_zi, key=key), x
 
 if __name__ == "__main__":
     lp = LowPassNoise(2, 2.0, 100)
@@ -97,16 +97,25 @@ if __name__ == "__main__":
     state = lp.init_state(key, 2)
     for _ in range(10):
         result = []
+        white = []
         for _ in range(50):
-            y, state = lp.sample(state)
+            y, state, x = lp.sample(state)
             result.append(y)
-            print(y)
+            white.append(x)
+            #print(y)
         result = np.array(result)#[:, 0]
+        white = np.array(white)
         import matplotlib.pyplot as plt
-        plt.subplot(121)
+        plt.subplot(221)
         plt.plot(result[:, 0, 0])
         plt.plot(result[:, 0, 1])
-        plt.subplot(122)
+        plt.subplot(222)
         plt.plot(result[:, 1, 0])
         plt.plot(result[:, 1, 1])
+        plt.subplot(223)
+        plt.plot(white[:, :, 0])
+        plt.plot(white[:, :, 1])
+        plt.subplot(224)
+        plt.plot(white[:, :, 0])
+        plt.plot(white[:, :, 1])
         plt.show()

@@ -50,13 +50,13 @@ def generate_stateful_unroll(
   def f(carry, unused_t):
     env_state, noise_state, current_key = carry
     current_key, next_key = jax.random.split(current_key)
-    actions, policy_extras = policy(env_state.obs, key)
+    actions, policy_extras = policy(env_state.obs, current_key)
 
     # MAN-IN-THE-MIDDLE attack on the policy distribution
     logits = policy_extras['distribution_params']
     loc, scale = jnp.split(logits, 2, axis=-1)
     dist = NormalTanhDistribution(event_size=loc.shape[-1])
-    noise_sample, next_noise_state = noise_dist.sample(noise_state)
+    noise_sample, next_noise_state, _ = noise_dist.sample(noise_state)
     #jax.debug.print("Noise sample: {noise_sample}", noise_sample=noise_sample)
     tanh_scale = (jax.nn.softplus(scale) + dist._min_std) * dist._var_scale
     raw_actions = loc + tanh_scale * noise_sample
