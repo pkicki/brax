@@ -206,6 +206,7 @@ def train(
     randomization_fn: Optional[
         Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
     ] = None,
+    unroll_fn: Optional[Callable[[Any], Any]] = acting.generate_unroll,
     # ppo params
     learning_rate: float = 1e-4,
     entropy_cost: float = 1e-4,
@@ -544,7 +545,7 @@ def train(
     def f(carry, unused_t):
       current_state, current_key = carry
       current_key, next_key = jax.random.split(current_key)
-      next_state, data = acting.generate_unroll(
+      next_state, data = unroll_fn(
           env,
           current_state,
           policy,
