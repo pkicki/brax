@@ -44,7 +44,11 @@ def generate_stateful_unroll(
 ) -> Tuple[State, Transition]:
   """Collect trajectories of given unroll_length."""
   # TODO initialize the state of the policy distribution
-  noise_dist = LowPassNoise(action_dim=env.action_size, cutoff=cutoff_freq, order=order, fs=1./env.dt)
+  noise_dist = LowPassNoise(episode_length=unroll_length,
+                            action_dim=env.action_size,
+                            cutoff=cutoff_freq,
+                            order=order,
+                            fs=1./env.dt)
   init_noise_state = noise_dist.init_state(key, n_envs=env_state.done.shape[0])
 
   def f(carry, unused_t):
