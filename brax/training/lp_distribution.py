@@ -40,6 +40,9 @@ class LowPassNoise:
         self.action_dim = action_dim
 
         b, a = signal.butter(order, cutoff, btype='low', analog=False, fs=fs)
+        wn = np.random.randn(10_000)
+        lpn = signal.lfilter(b, a, wn)
+        self.scale_factor = 1. / jnp.std(lpn)
         self.b = jnp.array(b)
         self.a = jnp.array(a)
         
@@ -61,24 +64,26 @@ class LowPassNoise:
         self.white_noise = self.white_noise[tran_len:]
         lp_noise = self.lp_noise[tran_len:]
 
-        scale_factor = jnp.std(self.white_noise, axis=0, keepdims=True) / jnp.std(lp_noise, axis=0, keepdims=True)
-        lp_noise = lp_noise * scale_factor
-        wn_mean = jnp.mean(self.white_noise, axis=0, keepdims=True)
-        lpn_mean = jnp.mean(lp_noise, axis=0, keepdims=True)
-        self.lp_noise = (lp_noise - lpn_mean) + wn_mean
+        #scale_factor = jnp.std(self.white_noise, axis=0, keepdims=True) / jnp.std(lp_noise, axis=0, keepdims=True)
+        lp_noise = lp_noise * self.scale_factor
+        #wn_mean = jnp.mean(self.white_noise, axis=0, keepdims=True)
+        #lpn_mean = jnp.mean(lp_noise, axis=0, keepdims=True)
+        self.lp_noise = lp_noise
+        #self.lp_noise = (lp_noise - lpn_mean) + wn_mean
         return NoiseState(0, key)
 
     def sample(self, state: NoiseState) -> Tuple[jnp.ndarray, NoiseState, jnp.ndarray]:
         return self.lp_noise[state.i], NoiseState(state.i + 1, state.key), self.white_noise[state.i]
 
 if __name__ == "__main__":
+    import matplotlib.pyplot as plt
     N = 20
-    lp = LowPassNoise(N, 2, 3.0, 100, 3)
+    lp = LowPassNoise(N, 100, 3.0, 100, 3)
     key = jax.random.PRNGKey(0)
     for _ in range(10):
         result = []
         white = []
-        state = lp.init_state(key, 2)
+        state = lp.init_state(key, 100)
         for _ in range(N):
             y, state, x = lp.sample(state)
             result.append(y)
@@ -87,11 +92,31 @@ if __name__ == "__main__":
         key = state.key
         result = np.array(result)#[:, 0]
         white = np.array(white)
+
+        result_flat = result.reshape((N, -1))
+        white_flat = white.reshape((N, -1))
+        lpn_scipy = signal.lfilter(lp.b, lp.a, white_flat, axis=0)
+        plt.figure()
+        plt.title("LPN scipy Hist")
+        for i in range(20):
+            plt.subplot(4, 5, i + 1)
+            plt.hist(lpn_scipy[i], bins=20)
+        plt.figure()
+        plt.title("LPN Hist")
+        for i in range(20):
+            plt.subplot(4, 5, i + 1)
+            plt.hist(result_flat[i], bins=20)
+        plt.figure()
+        plt.title("WN Hist")
+        for i in range(20):
+            plt.subplot(4, 5, i + 1)
+            plt.hist(white_flat[i], bins=20)
+        plt.show()
+
         print("LP STD:", result.std(0).mean())
         print("White STD:", white.std(0).mean())
         print("LP MEAN:", result.mean(0).mean())
         print("White MEAN:", white.mean(0).mean())
-        import matplotlib.pyplot as plt
         plt.subplot(221)
         plt.plot(result[:, 0, 0], 'b')
         plt.plot(result[:, 0, 1], 'r')
