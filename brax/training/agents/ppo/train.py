@@ -476,7 +476,7 @@ def train(
   ):
     optimizer_state, params, key, continue_training = carry
     key, key_loss = jax.random.split(key)
-    (_, metrics), params, optimizer_state = gradient_update_fn(
+    (_, metrics), new_params, new_optimizer_state = gradient_update_fn(
         params,
         normalizer_params,
         data,
