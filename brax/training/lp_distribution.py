@@ -78,7 +78,9 @@ class LowPassNoise:
         # ignore transient state
         self.white_noise = self.white_noise[tran_len:]
         lp_noise = self.lp_noise[tran_len:]
-        self.lp_noise = (lp_noise - jnp.mean(lp_noise, axis=0, keepdims=True)) * self.scale_factor
+        mean = jnp.mean(lp_noise, axis=0, keepdims=True)
+        #self.lp_noise = (lp_noise - mean) * self.scale_factor
+        self.lp_noise = (lp_noise - mean) * self.scale_factor + mean
         return NoiseState(0, key)
 
     def sample(self, state: NoiseState) -> Tuple[jnp.ndarray, NoiseState, jnp.ndarray]:
@@ -128,7 +130,7 @@ class LowPassNoise:
     #    return y, NoiseState(zi=new_zi, key=key), x
 
 if __name__ == "__main__":
-    N = 100
+    N = 20
     lp = LowPassNoise(N, 2, 2.0, 100)
     key = jax.random.PRNGKey(0)
     for _ in range(10):
