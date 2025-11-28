@@ -65,11 +65,12 @@ class LowPassNoise:
         lp_noise = self.lp_noise[tran_len:]
 
         #scale_factor = jnp.std(self.white_noise, axis=0, keepdims=True) / jnp.std(lp_noise, axis=0, keepdims=True)
-        lp_noise = lp_noise * self.scale_factor
-        #wn_mean = jnp.mean(self.white_noise, axis=0, keepdims=True)
-        #lpn_mean = jnp.mean(lp_noise, axis=0, keepdims=True)
-        self.lp_noise = lp_noise
-        #self.lp_noise = (lp_noise - lpn_mean) + wn_mean
+        #lp_noise = lp_noise * self.scale_factor
+        wn_mean = jnp.mean(self.white_noise, axis=0, keepdims=True)
+        lpn_mean = jnp.mean(lp_noise, axis=0, keepdims=True)
+        #self.lp_noise = lp_noise
+        self.lp_noise = (lp_noise - lpn_mean) + wn_mean
+        self.lp_noise = self.lp_noise * self.scale_factor
         return NoiseState(0, key)
 
     def sample(self, state: NoiseState) -> Tuple[jnp.ndarray, NoiseState, jnp.ndarray]:
