@@ -224,6 +224,7 @@ def train(
     normalize_advantage: bool = True,
     vf_loss_coefficient: float = 0.5,
     desired_kl: float = 0.01,
+    target_kl: float = 0.015,
     learning_rate_schedule: Optional[
         Union[str, ppo_optimizer.LRSchedule]
     ] = None,
@@ -473,7 +474,7 @@ def train(
       data: types.Transition,
       normalizer_params: running_statistics.RunningStatisticsState,
   ):
-    optimizer_state, params, key = carry
+    optimizer_state, params, key, continue_training = carry
     key, key_loss = jax.random.split(key)
     (_, metrics), params, optimizer_state = gradient_update_fn(
         params,
@@ -482,6 +483,35 @@ def train(
         key_loss,
         optimizer_state=optimizer_state,
     )
+
+    # KL-div early stopping
+    kl = metrics['kl_mean']
+    kl = jax.lax.pmean(kl, axis_name=_PMAP_AXIS_NAME)
+    
+    # Check if we violated the target KL
+    # If target_kl is None or 0, we disable this feature
+    has_violated = (kl > target_kl)
+    if target_kl <= 0:
+        has_violated = jnp.array(False)
+
+    # If continue_training was True, we accept new_params. 
+    # If False, we keep params (old).
+    params = jax.tree_util.tree_map(
+        lambda n, o: jnp.where(continue_training, n, o), 
+        new_params, 
+        params
+    )
+    
+    # Same for optimizer state
+    optimizer_state = jax.tree_util.tree_map(
+        lambda n, o: jnp.where(continue_training, n, o),
+        new_optimizer_state,
+        optimizer_state
+    )
+
+    # Update the flag for the NEXT step
+    continue_training = continue_training & (~has_violated)
+    metrics['early_stop'] = 1.0 - continue_training.astype(jnp.float32)
 
     metrics['learning_rate'] = jnp.array(learning_rate, dtype=float)
     if lr_is_adaptive_kl:
@@ -492,7 +522,7 @@ def train(
       )
       metrics['learning_rate'] = lr
 
-    return (optimizer_state, params, key), metrics
+    return (optimizer_state, params, key, continue_training), metrics
 
   def sgd_step(
       carry,
@@ -500,7 +530,7 @@ def train(
       data: types.Transition,
       normalizer_params: running_statistics.RunningStatisticsState,
   ):
-    optimizer_state, params, key = carry
+    optimizer_state, params, key, continue_training = carry
     key, key_perm, key_grad = jax.random.split(key, 3)
 
     if augment_pixels:
@@ -521,14 +551,14 @@ def train(
       return x
 
     shuffled_data = jax.tree_util.tree_map(convert_data, data)
-    (optimizer_state, params, _), metrics = jax.lax.scan(
+    (optimizer_state, params, _, continue_training), metrics = jax.lax.scan(
         functools.partial(minibatch_step, normalizer_params=normalizer_params),
-        (optimizer_state, params, key_grad),
+        (optimizer_state, params, key_grad, continue_training),
         shuffled_data,
         length=num_minibatches,
     )
 
-    return (optimizer_state, params, key), metrics
+    return (optimizer_state, params, key, continue_training), metrics
 
   def training_step(
       carry: Tuple[TrainingState, envs.State, PRNGKey], unused_t
@@ -577,11 +607,14 @@ def train(
           pmap_axis_name=_PMAP_AXIS_NAME,
       )
 
-    (optimizer_state, params, _), metrics = jax.lax.scan(
+    continue_training = jnp.array(True)
+
+    (optimizer_state, params, _, _), metrics = jax.lax.scan(
         functools.partial(
             sgd_step, data=data, normalizer_params=normalizer_params
         ),
-        (training_state.optimizer_state, training_state.params, key_sgd),
+        (training_state.optimizer_state, training_state.params,
+         key_sgd, continue_training),
         (),
         length=num_updates_per_batch,
     )
