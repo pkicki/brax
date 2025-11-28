@@ -60,10 +60,12 @@ def generate_stateful_unroll(
     logits = policy_extras['distribution_params']
     loc, scale = jnp.split(logits, 2, axis=-1)
     dist = NormalTanhDistribution(event_size=loc.shape[-1])
+    param_dist = dist.create_dist(logits)
     noise_sample, next_noise_state, _ = noise_dist.sample(noise_state)
     #jax.debug.print("Noise sample: {noise_sample}", noise_sample=noise_sample)
-    tanh_scale = (jax.nn.softplus(scale) + dist._min_std) * dist._var_scale
-    raw_actions = loc + tanh_scale * noise_sample
+    #tanh_scale = (jax.nn.softplus(scale) + dist._min_std) * dist._var_scale
+    #raw_actions = loc + tanh_scale * noise_sample
+    raw_actions = param_dist.loc + param_dist.scale * noise_sample
     log_prob = dist.log_prob(logits, raw_actions)
     #jax.debug.print("Log probs: {log_prob}", log_prob=log_prob)
     #jax.debug.print("Raw actions: {raw_actions}", raw_actions=raw_actions)
