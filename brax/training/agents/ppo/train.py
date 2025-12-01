@@ -759,7 +759,7 @@ def train(
   )
   evaluator = acting.Evaluator(
       eval_env,
-      functools.partial(make_policy, deterministic=deterministic_eval),
+      functools.partial(make_policy, step=training_state.env_steps.lo, deterministic=deterministic_eval),
       num_eval_envs=num_eval_envs,
       episode_length=episode_length,
       action_repeat=action_repeat,
