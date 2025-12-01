@@ -570,7 +570,7 @@ def train(
         training_state.normalizer_params,
         training_state.params.policy,
         training_state.params.value,
-    ))
+    ), step=training_state.env_steps.lo)
 
     def f(carry, unused_t):
       current_state, current_key = carry

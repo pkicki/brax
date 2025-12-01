@@ -23,6 +23,7 @@ from brax.training.types import PRNGKey
 import flax
 from flax import linen
 import jax
+import jax.numpy as jnp
 
 
 @flax.struct.dataclass
@@ -36,7 +37,7 @@ def make_inference_fn(ppo_networks: PPONetworks):
   """Creates params and inference function for the PPO agent."""
 
   def make_policy(
-      params: types.Params, deterministic: bool = False
+      params: types.Params, step: int, deterministic: bool = False
   ) -> types.Policy:
     policy_network = ppo_networks.policy_network
     parametric_action_distribution = ppo_networks.parametric_action_distribution
@@ -46,6 +47,9 @@ def make_inference_fn(ppo_networks: PPONetworks):
     ) -> Tuple[types.Action, types.Extra]:
       param_subset = (params[0], params[1])  # normalizer and policy params
       logits = policy_network.apply(*param_subset, observations)
+      loc, scale = jnp.split(logits, 2, axis=-1)
+      scale = jnp.ones_like(scale) * (jnp.exp(-step.astype(float) / 2.5e7) + 0.05)
+      logits = jnp.concatenate([loc, scale], axis=-1)
       if deterministic:
         return ppo_networks.parametric_action_distribution.mode(logits), {}
       raw_actions = parametric_action_distribution.sample_no_postprocessing(
